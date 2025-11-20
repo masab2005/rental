@@ -1,18 +1,11 @@
 import { 
-    createUserService, 
+    createUserAndProfileService, 
     getAllUsersService,
     getUserByIdService,
     updateUserService,
     deleteUserService
 } from '../models/userModel.js';
 
-import {
-    createStaffService 
-} from '../models/staffModel.js';
-
-import {
-    createCustomerService
-} from '../models/customerModel.js';
 
 const handerResponse = (res,status, message, data = null) => {
     res.status(status).json({
@@ -23,29 +16,47 @@ const handerResponse = (res,status, message, data = null) => {
 }
 
 export const createUser = async (req, res, next) => {
-  const { username, password, role, secretKey, name, phone, driverLicense} = req.body;
+  const { username, password, role, secretKey, name, phone, driverLicense } = req.body;
 
   try {
+    // Basic validation
+    if (!username || !password || !role || !name || !phone) {
+      return res.status(400).json({ error: "username, password, role, name and phone are required" });
+    }
+
     if (!["customer", "staff"].includes(role)) {
       return res.status(400).json({ error: "Role must be 'customer' or 'staff'" });
     }
-    
+
     if (role === "staff" && secretKey !== process.env.STAFF_SECRET_KEY) {
       return res.status(403).json({ error: "Invalid staff secret key" });
     }
-    if(role === "staff" && secretKey === process.env.STAFF_SECRET_KEY){
-        const newStaff = await createStaffService({ name,phone });
-        handerResponse(res, 201, "Staff created successfully", newStaff);
-    }
-    if(role === "customer"){
-        const newCustomer = await createCustomerService({ name, phone, driverLicense });
-        handerResponse(res, 201, "Customer created successfully", newCustomer);
-    }
-    const newUser = await createUserService({ username, password, role });
 
-    handerResponse(res, 201, "User created successfully", newUser);
-  } catch (error) {
-    next(error);
+    // Validate phone shape (11 digits)
+    if (!/^[0-9]{11}$/.test(phone)) {
+      return res.status(400).json({ error: "phone must be exactly 11 digits" });
+    }
+
+    // driverLicense required for customer
+    if (role === "customer" && (!driverLicense || driverLicense.length > 20)) {
+      return res.status(400).json({ error: "driverLicense is required for customers and max 20 chars" });
+    }
+
+    const result = await createUserAndProfileService({
+      username,
+      password,
+      role,
+      name,
+      phone,
+      driverLicense: driverLicense ?? null,
+    });
+    return handerResponse(res, 201, "User and profile created successfully", result);
+  } catch (err) {
+    if (err.code === "23505") {
+      return res.status(409).json({ error: "Duplicate value. Possibly username, phone or driver license already exists." });
+    }
+    // Unexpected
+    next(err);
   }
 };
 

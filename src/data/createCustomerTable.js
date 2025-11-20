@@ -5,7 +5,7 @@ const createCustomerTable = async () => {
    CREATE TABLE IF NOT EXISTS customers (
     customerid SERIAL PRIMARY KEY,
     customername VARCHAR(100) NOT NULL,
-    customerphone CHAR(11) NOT NULL CHECK (customerphone ~ '^[0-9]{11}$'),
+    customerphone CHAR(11) NOT NULL UNIQUE CHECK (customerphone ~ '^[0-9]{11}$'),
     driverlicense VARCHAR(20) NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP

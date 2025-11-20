@@ -5,7 +5,7 @@ const createStaffTable = async () => {
    CREATE TABLE IF NOT EXISTS staff (
     staffid SERIAL PRIMARY KEY,
     staffname VARCHAR(100) NOT NULL,
-    staffphone CHAR(11) NOT NULL CHECK (staffphone ~ '^[0-9]{11}$'),
+    staffphone CHAR(11) NOT NULL UNIQUE CHECK (staffphone ~ '^[0-9]{11}$'),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
