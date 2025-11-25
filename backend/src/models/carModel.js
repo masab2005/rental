@@ -12,22 +12,24 @@ export const uploadCarService = async ({ carModel, carYear, carStatus, carPrice,
 
 export const getAllCarsService = async () => {
     const result = await pool.query(`
-        SELECT carId, carModel, carYear, carStatus, carPrice, maintenanceId, carImageUrl, created_at
-        FROM cars`);
+        SELECT c.carId, c.carModel, c.carYear, c.carStatus, c.carPrice, c.maintenanceId, c.carImageUrl, c.created_at, r.bookingId
+        FROM cars c
+        LEFT JOIN rentals r ON c.carId = r.carId AND r.status = 'active'
+    `);
     return result.rows;
 }
 
 export const getCarByIdService = async (id) => {
   const result = await pool.query(`
     SELECT 
-      carId       AS "carId",
-      carModel    AS "carModel",
-      carYear     AS "carYear",
-      carStatus   AS "carStatus",
-      carPrice    AS "carPrice",
-      maintenanceId AS "maintenanceId",
-      carImageUrl AS "carImageUrl",
-      created_at  AS "createdAt"
+      carId,    
+      carModel,   
+      carYear,     
+      carStatus,   
+      carPrice,   
+      maintenanceId,
+      carImageUrl,
+      created_at  
     FROM cars
     WHERE carId = $1
   `, [id]);
@@ -36,7 +38,13 @@ export const getCarByIdService = async (id) => {
 // services/carService.js
 export const updateCarByIDService = async (carId, carData) => {
     const { carModel, carYear, carStatus, carPrice, maintenanceId, carImageUrl } = carData;
-
+    //first check if carId is in rentals table then prevent update
+    const rentalCheck = await pool.query(`
+        SELECT * FROM rentals WHERE carId = $1 AND status IN ('requested', 'active')
+    `, [carId]);
+    if (rentalCheck.rows.length > 0) {
+        throw new Error("Cannot update car while it has active or pending rental bookings");
+    }
     const result = await pool.query(`
         UPDATE cars
         SET carModel = $1,
@@ -75,7 +83,7 @@ export const searchCarsService = async ({
   page = 1,
   limit = 20
 }) => {
-  let query = `SELECT carId, carModel, carYear, carStatus, carPrice, maintenanceId, carImageUrl, created_at FROM cars WHERE 1=1`;
+  let query = `SELECT carId, carModel, carYear, carStatus, carPrice, maintenanceId, carImageUrl, created_at FROM cars WHERE carStatus = 'available'`;
   const params = [];
   let paramIndex = 1;
 

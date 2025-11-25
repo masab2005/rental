@@ -41,7 +41,6 @@ export const getCarById = async (req, res, next) => {
         next(error);
     }
 }
-
 // controllers/carController.js
 export const updateCarByID = async (req, res, next) => {
     try {

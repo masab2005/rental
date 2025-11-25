@@ -4,7 +4,7 @@ import { uploadCar,
         getCarById,
         updateCarByID,
         deleteCarByID,
-        searchCars
+        searchCars,
  } from '../controllers/carController.js';
 import { auth } from '../middlewares/auth.js';
 import { authorizeRoles } from '../middlewares/authorizeRoles.js';

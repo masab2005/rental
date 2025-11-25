@@ -23,7 +23,6 @@ export function AuthProvider({ children }){
     try {
       const data = await fetchJson('/user/login', { method: 'POST', body: { username, password, role } });
       setToken(data.token);
-      console.log(data);
       setUser({ username, role: data.role, userid: data.userid });
       setLoading(false);
       return data;

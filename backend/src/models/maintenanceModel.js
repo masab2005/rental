@@ -76,7 +76,7 @@ export const deleteMaintenanceAndUnlinkCar = async (maintenanceId) => {
     await client.query('BEGIN');
 
     await client.query(
-      `UPDATE cars SET maintenanceid = NULL WHERE maintenanceid = $1`,
+      `UPDATE cars SET maintenanceid = NULL,carstatus = 'available' WHERE maintenanceid = $1`,
       [maintenanceId]
     );
 

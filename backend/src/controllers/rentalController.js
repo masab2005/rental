@@ -2,7 +2,6 @@ import { createRentalService } from '../models/rentalModel.js';
 import pool from '../config/db.js';
 import handerResponse from '../utils/handerResponse.js';
 import { 
-  getRentalHistoryService,
   getRequestedRentalsService, 
   approveRentalService,
   getRentedCarsByUserService,
@@ -10,6 +9,7 @@ import {
   endRentalService,
   declineRentalService
  } from '../models/rentalModel.js';
+ import { deletePaymentService } from '../models/paymentModel.js';
 export const createRental = async (req, res, next) => {
   try {
     const {
@@ -57,6 +57,7 @@ export const createRental = async (req, res, next) => {
       [userIdNum]
     );
     if (custRows.length === 0) {
+      await deletePaymentService(paymentIdNum);
       return handerResponse(res, 400, 'Customer record not found for this user');
     }
     const customerIdNum = custRows[0].customerid;
@@ -65,11 +66,12 @@ export const createRental = async (req, res, next) => {
     const { rows: existing } = await pool.query(
       `SELECT 1 FROM rentals 
        WHERE carId = $1 
-         AND NOT (endDate < $2 OR startDate > $3)`,
+       AND NOT (endDate < $2 OR startDate > $3)`,
       [carIdNum, start.toISOString().slice(0,10), end.toISOString().slice(0,10)]
     );
 
     if (existing.length > 0) {
+      await deletePaymentService(paymentIdNum);
       return handerResponse(res, 400, 'Car is already booked for the selected dates');
     }
 
@@ -88,21 +90,6 @@ export const createRental = async (req, res, next) => {
     return handerResponse(res, 201, 'Rental created successfully', rental);
   } catch (err) {
     return next(err);
-  }
-};
-
-export const getRentalHistory = async (req, res, next) => {
-  try {
-    const { id } = req.params; 
-    if (!id) {
-      return handerResponse(res, 400, "userId is required");
-    }
-
-    const rentals = await getRentalHistoryService(id);
-
-    return handerResponse(res, 200, "Rental history fetched successfully", rentals);
-  } catch (err) {
-    next(err);
   }
 };
 
@@ -179,18 +166,18 @@ export const requestedRentalsByUser = async (req, res, next) => {
 
 export const endRental = async (req, res, next) => {
   try {
-    const { bookingId } = req.body;
+    const { carId } = req.params;
 
-    if (!bookingId) {
-      return handerResponse(res, 400, "bookingId is required");
+    if (!carId) {
+      return handerResponse(res, 400, "carId is required");
     }
 
-    const bookingIdNum = Number(bookingId);
-    if (!Number.isInteger(bookingIdNum) || bookingIdNum <= 0) {
-      return handerResponse(res, 400, "bookingId must be a positive integer");
+    const carIdNum = Number(carId);
+    if (!Number.isInteger(carIdNum) || carIdNum <= 0) {
+      return handerResponse(res, 400, "carId must be a positive integer");
     }
 
-    const result = await endRentalService(bookingIdNum);
+    const result = await endRentalService(carIdNum);
 
     return handerResponse(res, 200, "Rental ended successfully", result);
   } catch (err) {
@@ -216,16 +203,6 @@ export const declineRental = async (req, res, next) => {
     return handerResponse(res, 201, "Rental declined successfully", result);
   } catch (err) {
     next(err);
-  }
-};
-
-export const getPreviousRentals = async (req, res) => {
-  try {
-    const rentals = await getRentalHistoryService(req.params.id);
-    res.json({ data: rentals });
-  } catch (err) {
-    console.error('Previous rentals error:', err);
-    res.status(500).json({ message: 'Internal server error' });
   }
 };
 

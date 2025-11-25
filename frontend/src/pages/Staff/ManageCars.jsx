@@ -10,7 +10,8 @@ export default function ManageCars(){
   const [editingCar, setEditingCar] = useState(null);
   const [formData, setFormData] = useState({
     carModel: '', carYear: '', carPrice: '', 
-    carStatus: 'available', carImageUrl: ''
+    carStatus: 'available', carImageUrl: '',
+    maintenanceType: '', maintenanceCost: '', maintenanceDate: ''
   });
 
   async function loadCars(){
@@ -30,7 +31,8 @@ export default function ManageCars(){
     setFormData({
       carModel: car.carmodel || '', carYear: car.caryear || '', 
       carPrice: car.carprice || '', carStatus: car.carstatus || 'available', 
-      carImageUrl: car.carimageurl || ''
+      carImageUrl: car.carimageurl || '',
+      maintenanceType: '', maintenanceCost: '', maintenanceDate: ''
     });
     setShowModal(true);
   }
@@ -40,7 +42,8 @@ export default function ManageCars(){
     setFormData({
       carModel: '', carYear: '', carPrice: '', 
       carStatus: 'available', carImageUrl: '',
-      
+    maintenanceType: '', maintenanceCost: '', maintenanceDate: ''
+    
     });
     setShowModal(true);
   }
@@ -54,18 +57,26 @@ export default function ManageCars(){
       }
 
       if (editingCar) {
-        if(formData.carStatus === 'maintenance'){
-          await fetchJson(`/api/maintenance`, {
-          method: 'POST',
-          body: formData
-        });
-        }
-        else{
+        if (formData.carStatus === 'maintenance') {
+          if (!formData.maintenanceType || !formData.maintenanceCost || !formData.maintenanceDate) {
+            alert('Please fill in all maintenance details');
+            return;
+          }
+          await fetchJson('/api/maintenance', {
+            method: 'POST',
+            body: {
+              carId: editingCar.carid,
+              maintenanceType: formData.maintenanceType,
+              maintenanceCost: parseFloat(formData.maintenanceCost),
+              maintenanceDate: formData.maintenanceDate
+            }
+          });
+        } else {
           await fetchJson(`/car/cars/${editingCar.carid}`, {
-          method: 'PUT',
-          body: formData
-        });
-      }
+            method: 'PUT',
+            body: formData
+          });
+        }
         alert('Car updated successfully');
       } else {
         await fetchJson('/car/uploadCar', {
@@ -92,6 +103,18 @@ export default function ManageCars(){
     }
   }
 
+  async function endRental(carId){
+    if (!confirm('Are you sure you want to end this rental?')) return;
+    try {
+      console.log('Ending rental for carId:', carId);
+      await fetchJson(`/rental/endRental/${carId}`, { method: 'POST' });
+      alert('Rental ended successfully');
+      loadCars();
+    } catch (e) {
+      alert(e.message || 'Failed to end rental');
+    }
+  }
+
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
@@ -114,44 +137,103 @@ export default function ManageCars(){
           No cars found. Add a new car to get started.
         </div>
       ) : (
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
           {cars.map(c => (
-            <div key={c.carid} className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow">
-            <div className="h-40 bg-gray-200 overflow-hidden">
-                <img src={c.carimageurl || 'https://via.placeholder.com/400x200?text=Car'} alt={c.carmodel} className="w-full h-full object-cover" />
-              </div>
-              <div className="p-4">
-                <h3 className="text-lg font-bold" style={{ color: '#0F172A' }}>
-                  {c.carbrand} {c.carmodel}
-                </h3>
-                <p style={{ color: '#64748B' }} className="text-sm mb-3">
-                  {c.caryear} | {c.cartype}
-                </p>
-                <div className="mb-3 space-y-1">
-                  <p style={{ color: '#64748B' }} className="text-sm">
-                    <span className="font-semibold" style={{ color: '#3B82F6' }}>${c.carprice}</span>/day
-                  </p>
-                  <p style={{ color: '#64748B' }} className="text-sm">
-                    Status: <span className={`font-semibold ${c.carstatus === 'available' ? 'text-green-600' : 'text-red-600'}`}>
-                      {c.carstatus}
-                    </span>
-                  </p>
+            <div key={c.carid} className="group relative bg-white rounded-3xl overflow-hidden shadow-md hover:shadow-2xl transition-all duration-500 border border-slate-100 hover:border-blue-200 hover:-translate-y-2">
+              {/* Image Container */}
+              <div className="relative h-48 overflow-hidden bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+                <img 
+                  src={c.carimageurl ? c.carimageurl.replace('/upload/', '/upload/w_500,h_300,c_fill,q_auto:best,f_auto/') : 'https://via.placeholder.com/500x300?text=Car'} 
+                  alt={c.carmodel} 
+                  className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 opacity-90 group-hover:opacity-100" 
+                  loading="lazy"
+                  style={{ imageRendering: '-webkit-optimize-contrast' }}
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+                
+                {/* Price Badge */}
+                <div className="absolute top-3 right-3 backdrop-blur-xl bg-white/95 px-3 py-1.5 rounded-xl shadow-xl border border-white/50 transform group-hover:scale-105 transition-all duration-300">
+                  <div className="flex items-baseline gap-0.5">
+                    <span className="text-lg font-black bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">Rs{c.carprice}</span>
+                    <span className="text-[10px] font-semibold text-slate-500">/day</span>
+                  </div>
                 </div>
-                <div className="flex gap-2 pt-3 border-t">
-                  <button 
-                    onClick={() => openEditModal(c)}
-                    className="flex-1 px-3 py-2 rounded font-medium text-sm transition-colors"
-                    style={{ backgroundColor: '#DBEAFE', color: '#3B82F6' }}
-                  >
-                    Edit
-                  </button>
-                  <button 
-                    onClick={() => deleteCar(c.carid)}
-                    className="flex-1 px-3 py-2 rounded font-medium text-sm transition-colors"
-                    style={{ backgroundColor: '#FEE2E2', color: '#EF4444' }}
-                  >
-                    Delete
-                  </button>
+
+                {/* Status Badge */}
+                <div className="absolute bottom-3 left-3 flex items-center gap-2 backdrop-blur-lg bg-white/20 px-4 py-2 rounded-full border border-white/30">
+                  <div className={`w-2 h-2 rounded-full ${c.carstatus === 'available' ? 'bg-emerald-400' : c.carstatus === 'rented' ? 'bg-amber-400' : 'bg-red-400'} shadow-lg`}></div>
+                  <span className="text-xs font-bold text-white uppercase tracking-wider">{c.carstatus}</span>
+                </div>
+              </div>
+
+              {/* Content Section */}
+              <div className="p-5 space-y-4">
+                {/* Car Info */}
+                <div className="space-y-2">
+                  <h3 className="text-xl font-black text-slate-900 leading-tight tracking-tight group-hover:text-blue-600 transition-colors duration-300">
+                    {c.carbrand} {c.carmodel}
+                  </h3>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 rounded-full text-slate-700 font-semibold text-xs">
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                      {c.caryear}
+                    </span>
+                    {c.cartype && (
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 rounded-full text-blue-700 font-semibold text-xs">
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                        </svg>
+                        {c.cartype}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex gap-3 pt-3 border-t border-slate-100">
+                  {c.bookingid ? (
+                    <button 
+                      onClick={() => endRental(c.carid)}
+                      className="group/end flex-1 relative px-4 py-3 rounded-xl font-bold text-sm bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white shadow-md hover:shadow-xl transition-all duration-300 overflow-hidden"
+                    >
+                      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover/end:translate-x-full transition-transform duration-1000"></div>
+                      <span className="relative flex items-center justify-center gap-1.5">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        End Rental
+                      </span>
+                    </button>
+                  ) : (
+                    <>
+                      <button 
+                        onClick={() => openEditModal(c)}
+                        className="group/edit flex-1 relative px-4 py-3 rounded-xl font-bold text-sm bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white shadow-md hover:shadow-xl transition-all duration-300 overflow-hidden"
+                      >
+                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover/edit:translate-x-full transition-transform duration-1000"></div>
+                        <span className="relative flex items-center justify-center gap-1.5">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                          </svg>
+                          Edit
+                        </span>
+                      </button>
+                      <button 
+                        onClick={() => deleteCar(c.carid)}
+                        className="group/delete flex-1 relative px-4 py-3 rounded-xl font-bold text-sm bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white shadow-md hover:shadow-xl transition-all duration-300 overflow-hidden"
+                      >
+                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover/delete:translate-x-full transition-transform duration-1000"></div>
+                        <span className="relative flex items-center justify-center gap-1.5">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                          Delete
+                        </span>
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
@@ -212,6 +294,43 @@ export default function ManageCars(){
                 <option value="maintenance">Maintenance</option>
               </select>
             </div>
+
+            {formData.carStatus === 'maintenance' && (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1" style={{ color: '#0F172A' }}>Maintenance Type</label>
+                  <input 
+                    type="text" 
+                    value={formData.maintenanceType}
+                    onChange={(e) => setFormData({...formData, maintenanceType: e.target.value})}
+                    className="w-full px-3 py-2 border rounded-lg"
+                    style={{ borderColor: '#E2E8F0' }}
+                    placeholder="e.g., Engine Repair"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1" style={{ color: '#0F172A' }}>Maintenance Cost</label>
+                  <input 
+                    type="number" 
+                    value={formData.maintenanceCost}
+                    onChange={(e) => setFormData({...formData, maintenanceCost: e.target.value})}
+                    className="w-full px-3 py-2 border rounded-lg"
+                    style={{ borderColor: '#E2E8F0' }}
+                    placeholder="500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1" style={{ color: '#0F172A' }}>Maintenance Date</label>
+                  <input 
+                    type="date" 
+                    value={formData.maintenanceDate}
+                    onChange={(e) => setFormData({...formData, maintenanceDate: e.target.value})}
+                    className="w-full px-3 py-2 border rounded-lg"
+                    style={{ borderColor: '#E2E8F0' }}
+                  />
+                </div>
+              </div>
+            )}
 
             <div>
               <label className="block text-sm font-medium mb-1" style={{ color: '#0F172A' }}>Car Image</label>

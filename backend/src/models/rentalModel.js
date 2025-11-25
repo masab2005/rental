@@ -1,5 +1,5 @@
 import pool from "../config/db.js";
-
+import { deletePaymentService } from "./paymentModel.js";
 export const createRentalService = async ({
   customerId,
   userId,
@@ -44,49 +44,12 @@ export const createRentalService = async ({
     await client.query("COMMIT");
     return rows[0];
   } catch (err) {
+    await deletePaymentService(paymentId); // Rollback payment on failure
     await client.query("ROLLBACK");
     throw err;
   } finally {
     client.release();
   }
-};
-
-export const getRentalHistoryService = async (userId) => {
-  // 1) Lookup customerId from userId
-  const { rows: custRows } = await pool.query(
-    `SELECT customerid AS "customerId" FROM customers WHERE userid = $1`,
-    [userId]
-  );
-
-  if (custRows.length === 0) {
-    throw new Error("Customer not found");
-  }
-
-  const customerId = custRows[0].customerId;
-
-  // 2) Fetch completed rentals
-  const { rows: rentals } = await pool.query(
-    `
-      SELECT 
-        r.bookingid   AS "bookingId",
-        r.carid       AS "carId",
-        c.carmodel    AS "carModel",
-        c.carimageurl AS "carImageUrl",
-        r.startdate   AS "startDate",
-        r.enddate     AS "endDate",
-        r.totalamount AS "totalAmount",
-        r.paymentid   AS "paymentId",
-        r.status      AS "status"
-      FROM rentals r
-      JOIN cars c ON r.carid = c.carid
-      WHERE r.customerid = $1 AND r.status = 'completed'
-      ORDER BY r.startdate DESC
-      LIMIT 10
-    `,
-    [customerId]
-  );
-
-  return rentals;
 };
 
 export const getRequestedRentalsService = async () => {
@@ -95,6 +58,7 @@ export const getRequestedRentalsService = async () => {
       SELECT r.bookingId,
              r.carId,
              c.carModel,
+             c.carYear,
              c.carImageUrl,
              r.startDate,
              r.endDate,
@@ -104,7 +68,8 @@ export const getRequestedRentalsService = async () => {
              r.status,
              u.username AS customerUsername,
              cu.customerName,
-             cu.customerPhone
+             cu.customerPhone,
+             cu.driverLicense
       FROM rentals r
       JOIN cars c ON r.carId = c.carId
       JOIN customers cu ON r.customerId = cu.customerId
@@ -192,6 +157,7 @@ export const getRentedCarsByUserService = async (userId) => {
       r.carId,
       c.carModel,
       c.carImageUrl,
+      c.carYear,
       r.startDate,
       r.endDate,
       r.totalAmount,
@@ -213,17 +179,21 @@ export const getRequestedRentalsByUserService = async (userId) => {
   const { rows } = await pool.query(
     `
     SELECT
-  r.bookingid   AS "bookingId",
-  r.carid       AS "carId",
-  c.carmodel    AS "carModel",
-  c.carimageurl AS "carImageUrl",
-  r.startdate   AS "startdate",
-  r.enddate     AS "enddate",
-  r.totalamount AS "totalamount",
-  r.paymentid   AS "paymentId",
-  r.status      AS "status"
+  r.bookingid,
+  r.carid,
+  c.carmodel,
+  c.caryear,
+  c.carimageurl,
+  r.startdate,
+  r.enddate,
+  r.totalamount,
+  r.paymentid,
+  r.status,
+  cu.customername,
+  cu.driverlicense
 FROM rentals r
 JOIN cars c ON r.carid = c.carid
+JOIN customers cu ON r.customerid = cu.customerid
 WHERE r.userid = $1
   AND r.status = 'requested'
 ORDER BY r.startdate ASC;
@@ -234,25 +204,25 @@ ORDER BY r.startdate ASC;
   return rows;
 };
 
-export const endRentalService = async (bookingId) => {
+export const endRentalService = async (carId) => {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
 
     // 1) Lock rental and check status
     const { rows } = await client.query(
-      `SELECT r.carId, r.status
+      `SELECT r.bookingId,r.carId, r.status
        FROM rentals r
-       WHERE r.bookingId = $1
+       WHERE r.carId = $1
        FOR UPDATE`,
-      [bookingId]
+      [carId]
     );
 
     if (rows.length === 0) {
       throw new Error("Rental not found");
     }
 
-    const { carid, status } = rows[0];
+    const { bookingid , carid, status } = rows[0];
     if (status !== "active") {
       throw new Error("Rental is not currently active");
     }
@@ -265,12 +235,12 @@ export const endRentalService = async (bookingId) => {
 
     // 3) Mark rental as completed
     await client.query(
-      `UPDATE rentals SET status = 'completed', updated_at = NOW() WHERE bookingId = $1`,
-      [bookingId]
+      `UPDATE rentals SET status = 'completed', startDate = NULL, endDate = NULL WHERE bookingId = $1`,
+      [bookingid]
     );
 
     await client.query("COMMIT");
-    return { bookingId, carId, status: "completed" };
+    return { bookingid, carid, status: "completed" };
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;

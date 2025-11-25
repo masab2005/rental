@@ -14,6 +14,17 @@ export default function FiltersPanel({onChange}) {
           />
         </div>
         <div className="mb-4">
+          <label className="block text-sm mb-1" style={{ color: '#64748B' }}>Year</label>
+          <input 
+            className="input-modern" 
+            name="year" 
+            type="number"
+            placeholder="e.g., 2024"
+            min="1900"
+            max="2099"
+          />
+        </div>
+        <div className="mb-4">
           <label className="block text-sm mb-1" style={{ color: '#64748B' }}>Min Price</label>
           <input 
             className="input-modern" 
@@ -31,19 +42,7 @@ export default function FiltersPanel({onChange}) {
             placeholder="Maximum price..."
           />
         </div>
-        <div>
-          <label className="block text-sm mb-1" style={{ color: '#64748B' }}>Status</label>
-          <select 
-            className="input-modern" 
-            name="status"
-            defaultValue=""
-          >
-            <option value="">All</option>
-            <option value="available">Available</option>
-            <option value="rented">Rented</option>
-            <option value="maintenance">Maintenance</option>
-          </select>
-        </div>
+
       </form>
     </aside>
   );

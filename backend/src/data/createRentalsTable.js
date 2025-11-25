@@ -7,10 +7,10 @@ export const createRentalsTable = async () => {
     customerId INT NOT NULL,
     userId INT NOT NULL,
     staffId INT,
-    carId INT NOT NULL,
+    carId INT,
     paymentId INT NOT NULL,
-    startDate DATE NOT NULL,
-    endDate DATE NOT NULL,
+    startDate DATE,
+    endDate DATE,
     totalAmount NUMERIC(12,2) NOT NULL CHECK (totalAmount >= 0),
     status VARCHAR(20) NOT NULL DEFAULT 'requested' CHECK (status IN ('completed', 'declined', 'requested', 'active')),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -36,7 +36,8 @@ export const createRentalsTable = async () => {
     CONSTRAINT fk_rental_car
         FOREIGN KEY (carId)
         REFERENCES cars(carId)
-        ON DELETE RESTRICT,
+        ON DELETE SET NULL
+        ON UPDATE CASCADE,
 
     CONSTRAINT fk_rental_payment
         FOREIGN KEY (paymentId)

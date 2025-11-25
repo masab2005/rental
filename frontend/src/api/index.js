@@ -12,7 +12,7 @@ async function fetchJson(path, options = {}) {
   if (opts.body && headers['Content-Type'] === 'application/json' && typeof opts.body !== 'string') {
     opts.body = JSON.stringify(opts.body);
   }
-  console.log('🔍 API Request:', { url, method: opts.method || 'GET', body: opts.body });
+  console.log('API Request:', { url, method: opts.method || 'GET', body: opts.body });
   const res = await fetch(url, opts);
   const contentType = res.headers.get('content-type') || '';
   const isJson = contentType.includes('application/json');
