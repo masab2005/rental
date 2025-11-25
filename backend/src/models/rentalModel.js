@@ -15,13 +15,33 @@ export const createRentalService = async ({
   try {
     await client.query("BEGIN");
 
-    // 1) Update car status to 'requested'
+    const carRes = await client.query(
+      `SELECT carId, carStatus FROM cars WHERE carId = $1 FOR UPDATE`,
+      [carId]
+    );
+    if (carRes.rows.length === 0) {
+      throw new Error("Car not found");
+    }
+
+    const overlapRes = await client.query(
+      `SELECT 1 FROM rentals 
+       WHERE carId = $1 
+         AND status IN ('requested', 'active')
+         AND NOT (endDate < $2 OR startDate > $3)
+       LIMIT 1`,
+      [carId, startDate, endDate]
+    );
+    if (overlapRes.rows.length > 0) {
+      throw new Error("Car is already booked for the selected dates");
+    }
+
+    // 3) Update car status to 'requested'
     await client.query(
       `UPDATE cars SET carStatus = 'requested' WHERE carId = $1`,
       [carId]
     );
 
-    // 2) Insert rental
+    // 4) Insert rental
     const insertQuery = `
       INSERT INTO rentals
         (customerId, userId, staffId, carId, paymentId, startDate, endDate, totalAmount)
@@ -44,8 +64,22 @@ export const createRentalService = async ({
     await client.query("COMMIT");
     return rows[0];
   } catch (err) {
-    await deletePaymentService(paymentId); // Rollback payment on failure
-    await client.query("ROLLBACK");
+    let rollbackError;
+    try {
+      await client.query("ROLLBACK");
+    } catch (rbErr) {
+      rollbackError = rbErr;
+      console.error("Rollback failed in createRentalService:", rbErr);
+    }
+
+    // Perform compensation (payment reversal)
+    if (paymentId) {
+      try {
+        await deletePaymentService(paymentId);
+      } catch (compErr) {
+        console.error("Payment cleanup failed in createRentalService:", compErr)
+      }
+    }
     throw err;
   } finally {
     client.release();
@@ -96,44 +130,40 @@ export const approveRentalService = async ({ bookingId, userId }) => {
       throw new Error("Staff not found");
     }
     const staffId = staffRows[0].staffid;
-    // 1) Check rental status
-    const { rows } = await client.query(
-      `
-      SELECT r.carId, r.status
-      FROM rentals r
-      JOIN cars c ON r.carId = c.carId
-      WHERE r.bookingId = $1
-      FOR UPDATE
-    `,
+    // 1) Get rental data (without locking yet) to obtain carId
+    const rentalRes = await client.query(
+      `SELECT carId, status FROM rentals WHERE bookingId = $1`,
       [bookingId]
     );
-
-    if (rows.length === 0) {
+    if (rentalRes.rows.length === 0) {
       throw new Error("Rental not found");
     }
+    const { carid, status } = rentalRes.rows[0];
+    // 2) Lock car first
+    await client.query(`SELECT carId FROM cars WHERE carId = $1 FOR UPDATE`, [carid]);
+    const activeCheck = await client.query(
+      `SELECT 1 FROM rentals WHERE carId = $1 AND status = 'active' LIMIT 1`,
+      [carid]
+    );
+    if (activeCheck.rows.length > 0) {
+      throw new Error("Car already has an active rental");
+    }
+    // 3) Then lock rental
+    await client.query(`SELECT bookingId FROM rentals WHERE bookingId = $1 FOR UPDATE`, [bookingId]);
 
-    const { carid, status } = rows[0];
+    // 5) Validate status after locks
     if (status !== "requested") {
       throw new Error("Rental is not in requested status");
     }
 
-    // 2) Update car status to 'rented'
+    // 6) Update car status to 'rented'
     await client.query(
-      `
-      UPDATE cars
-      SET carStatus = 'rented'
-      WHERE carId = $1
-    `,
+      `UPDATE cars SET carStatus = 'rented' WHERE carId = $1`,
       [carid]
     );
 
-    // 3) Update rentals table with staffId and status to 'active'
     await client.query(
-      `
-      UPDATE rentals
-      SET staffId = $1, status = 'active'
-      WHERE bookingId = $2
-    `,
+      `UPDATE rentals SET staffId = $1, status = 'active' WHERE bookingId = $2`,
       [staffId, bookingId]
     );
 
@@ -208,32 +238,28 @@ export const endRentalService = async (bookingId) => {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-
-    // 1) Lock rental and check status
-    const { rows } = await client.query(
-      `SELECT bookingid, carid, status
-       FROM rentals
-       WHERE bookingid = $1
-       FOR UPDATE`,
+    const rentalRes = await client.query(
+      `SELECT bookingId, carId, status FROM rentals WHERE bookingId = $1`,
       [bookingId]
     );
-
-    if (rows.length === 0) {
+    if (rentalRes.rows.length === 0) {
       throw new Error("Rental not found");
     }
+    const { bookingid, carid, status } = rentalRes.rows[0];
 
-    const { bookingid, carid, status } = rows[0];
+    await client.query(`SELECT carId FROM cars WHERE carId = $1 FOR UPDATE`, [carid]);
+    await client.query(`SELECT bookingId FROM rentals WHERE bookingId = $1 FOR UPDATE`, [bookingId]);
+
     if (status !== "active") {
       throw new Error("Rental is not currently active");
     }
 
-    // 2) Update car status back to 'available'
     await client.query(
       `UPDATE cars SET carstatus = 'available' WHERE carid = $1`,
       [carid]
     );
 
-    // 3) Mark rental as completed
+    // 5) Mark rental as completed
     await client.query(
       `UPDATE rentals SET status = 'completed', startdate = NULL, enddate = NULL WHERE bookingid = $1`,
       [bookingid]
@@ -253,37 +279,32 @@ export const declineRentalService = async (bookingId) => {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-
-    // 1) Lock rental and check status, get paymentId
-    const { rows } = await client.query(
-      `SELECT r.carId, r.status, r.paymentId
-       FROM rentals r
-       WHERE r.bookingId = $1
-       FOR UPDATE`,
+    const rentalRes = await client.query(
+      `SELECT carId, status, paymentId FROM rentals WHERE bookingId = $1`,
       [bookingId]
     );
-
-    if (rows.length === 0) {
+    if (rentalRes.rows.length === 0) {
       throw new Error("Rental not found");
     }
+    const { carid, status, paymentid } = rentalRes.rows[0];
 
-    const { carid, status, paymentid } = rows[0];
+    await client.query(`SELECT carId FROM cars WHERE carId = $1 FOR UPDATE`, [carid]);
+    await client.query(`SELECT bookingId FROM rentals WHERE bookingId = $1 FOR UPDATE`, [bookingId]);
+
+  
     if (status !== "requested") {
       throw new Error("Rental is not in requested status");
     }
 
-    // 2) Update car status back to 'available'
     await client.query(
       `UPDATE cars SET carStatus = 'available' WHERE carId = $1`,
       [carid]
     );
 
-    // 3) Delete the associated payment (reverse payment)
-    await client.query(`DELETE FROM payments WHERE paymentId = $1`, [
-      paymentid,
-    ]);
+    // 5) Delete the associated payment (reverse payment)
+    await client.query(`DELETE FROM payments WHERE paymentId = $1`, [paymentid]);
 
-    // 4) Mark rental as declined
+    // 6) Mark rental as declined
     await client.query(
       `UPDATE rentals SET status = 'declined', updated_at = NOW() WHERE bookingId = $1`,
       [bookingId]

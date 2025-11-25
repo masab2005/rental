@@ -19,7 +19,6 @@ if (!globalThis.__pgPool) {
     connectionTimeoutMillis: 5000,
   });
 
-  // track whether we've logged the initial connect
   globalThis.__pgPoolLoggedConnected = false;
 
   globalThis.__pgPool.on("connect", () => {
@@ -31,10 +30,9 @@ if (!globalThis.__pgPool) {
 
   globalThis.__pgPool.on("error", (err) => {
     console.error("Unexpected Postgres client error", err);
-    // do not exit process here in production - up to your app semantics
   });
 
-  // optional: graceful shutdown
+  
   const cleanup = async () => {
     try {
       await globalThis.__pgPool.end();

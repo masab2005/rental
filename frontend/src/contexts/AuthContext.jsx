@@ -1,9 +1,11 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { fetchJson } from '../api';
 
 const AuthContext = createContext();
 
 export function AuthProvider({ children }){
+  const navigate = useNavigate();
   const [user, setUser] = useState(()=> {
     try { const raw = localStorage.getItem('user'); return raw ? JSON.parse(raw) : null; } catch { return null; }
   });
@@ -49,6 +51,7 @@ export function AuthProvider({ children }){
     setUser(null);
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    navigate('/login');
   }
 
   return (

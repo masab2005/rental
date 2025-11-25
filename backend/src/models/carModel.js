@@ -12,9 +12,19 @@ export const uploadCarService = async ({ carModel, carYear, carStatus, carPrice,
 
 export const getAllCarsService = async () => {
     const result = await pool.query(`
-        SELECT c.carId, c.carModel, c.carYear, c.carStatus, c.carPrice, c.maintenanceId, c.carImageUrl, c.created_at, r.bookingId
+        SELECT 
+            c.carId, 
+            c.carModel, 
+            c.carYear, 
+            c.carStatus, 
+            c.carPrice, 
+            c.maintenanceId, 
+            c.carImageUrl, 
+            c.created_at, 
+            (SELECT r.bookingId FROM rentals r 
+             WHERE r.carId = c.carId AND r.status = 'active' 
+             LIMIT 1) as bookingId
         FROM cars c
-        LEFT JOIN rentals r ON c.carId = r.carId AND r.status = 'active'
     `);
     return result.rows;
 }
@@ -38,26 +48,48 @@ export const getCarByIdService = async (id) => {
 // services/carService.js
 export const updateCarByIDService = async (carId, carData) => {
     const { carModel, carYear, carStatus, carPrice, maintenanceId, carImageUrl } = carData;
-    //first check if carId is in rentals table then prevent update
-    const rentalCheck = await pool.query(`
-        SELECT * FROM rentals WHERE carId = $1 AND status IN ('requested', 'active')
-    `, [carId]);
-    if (rentalCheck.rows.length > 0) {
-        throw new Error("Cannot update car while it has active or pending rental bookings");
-    }
-    const result = await pool.query(`
-        UPDATE cars
-        SET carModel = $1,
-            carYear = $2,
-            carStatus = $3,
-            carPrice = $4,
-            maintenanceId = $5,
-            carImageUrl = $6
-        WHERE carId = $7
-        RETURNING carId, carModel, carYear, carStatus, carPrice, maintenanceId, carImageUrl, created_at
-    `, [carModel, carYear, carStatus, carPrice, maintenanceId, carImageUrl, carId]);
+    
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
 
-    return result.rows[0]; // return the updated car
+        const carLock = await client.query(
+            `SELECT carId FROM cars WHERE carId = $1 FOR UPDATE`,
+            [carId]
+        );
+        if (carLock.rows.length === 0) {
+            throw new Error("Car not found");
+        }
+        // 2) Check for active or requested rentals
+        const rentalCheck = await client.query(`
+            SELECT 1 FROM rentals WHERE carId = $1 AND status IN ('requested', 'active') LIMIT 1
+        `, [carId]);
+        
+        if (rentalCheck.rows.length > 0) {
+            throw new Error("Cannot update car while it has active or pending rental bookings");
+        }
+
+        // 3) Perform update
+        const result = await client.query(`
+            UPDATE cars
+            SET carModel = $1,
+                carYear = $2,
+                carStatus = $3,
+                carPrice = $4,
+                maintenanceId = $5,
+                carImageUrl = $6
+            WHERE carId = $7
+            RETURNING carId, carModel, carYear, carStatus, carPrice, maintenanceId, carImageUrl, created_at
+        `, [carModel, carYear, carStatus, carPrice, maintenanceId, carImageUrl, carId]);
+
+        await client.query('COMMIT');
+        return result.rows[0];
+    } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+    } finally {
+        client.release();
+    }
 };
 
 // services/carService.js
@@ -68,7 +100,7 @@ export const deleteCarByIDService = async (carId) => {
         RETURNING carId, carModel, carYear, carStatus, carPrice, maintenanceId, carImageUrl, created_at
     `, [carId]);
 
-    return result.rows[0]; // will be undefined if no car was found
+    return result.rows[0]; 
 };
 
 export const searchCarsService = async ({

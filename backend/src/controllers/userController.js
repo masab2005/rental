@@ -10,7 +10,7 @@ import { updateCustomerInfoService, getCustomerByUserIdService } from '../models
 import { updateStaffInfoService, getStaffByUserIdService } from '../models/staffModel.js';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
-import handerResponse from '../utils/handerResponse.js';
+import handlerResponse from '../utils/handlerResponse.js';
 
 
 export const createUser = async (req, res, next) => {
@@ -19,25 +19,25 @@ export const createUser = async (req, res, next) => {
   try {
     // Basic validation
     if (!username || !password || !role || !name || !phone) {
-      return handerResponse(res, 400, "username, password, role, name and phone are required");
+      return handlerResponse(res, 400, "username, password, role, name and phone are required");
     }
 
     if (!["customer", "staff"].includes(role)) {
-      return handerResponse(res, 400, "Role must be 'customer' or 'staff'");
+      return handlerResponse(res, 400, "Role must be 'customer' or 'staff'");
     }
 
     if (role === "staff" && secretKey !== process.env.STAFF_SECRET_KEY) {
-      return handerResponse(res, 403, "Invalid staff secret key");
+      return handlerResponse(res, 403, "Invalid staff secret key");
     }
 
     // Validate phone shape (11 digits)
     if (!/^[0-9]{11}$/.test(phone)) {
-      return handerResponse(res, 400, "phone must be exactly 11 digits");
+      return handlerResponse(res, 400, "phone must be exactly 11 digits");
     }
 
     // driverLicense required for customer
     if (role === "customer" && (!driverLicense || driverLicense.length > 20)) {
-      return handerResponse(res, 400, "driverLicense is required for customers and max 20 chars");
+      return handlerResponse(res, 400, "driverLicense is required for customers and max 20 chars");
     }
 
     const result = await createUserAndProfileService({
@@ -48,10 +48,10 @@ export const createUser = async (req, res, next) => {
       phone,
       driverLicense: driverLicense ?? null,
     });
-    return handerResponse(res, 201, "User and profile created successfully", result);
+    return handlerResponse(res, 201, "User and profile created successfully", result);
   } catch (err) {
     if (err.code === "23505") {
-      return handerResponse(res, 409, "Duplicate value. Possibly username, phone or driver license already exists.");
+      return handlerResponse(res, 409, "Duplicate value. Possibly username, phone or driver license already exists.");
     }
     // Unexpected
     next(err);
@@ -96,7 +96,7 @@ export const loginUser = async (req,res,next) => {
 export const getAllUsers = async(req, res, next) => {
     try {
         const users = await getAllUsersService();
-        handerResponse(res, 200, 'Users retrieved successfully', users);
+        handlerResponse(res, 200, 'Users retrieved successfully', users);
     } catch (error) {
         next(error);
     }           
@@ -107,9 +107,9 @@ export const getUserById = async(req, res, next) => {
     try {
         const user = await getUserByIdService(id);
         if (!user) {
-            return handerResponse(res, 404, 'User not found');
+            return handlerResponse(res, 404, 'User not found');
         }
-        handerResponse(res, 200, 'User retrieved successfully', user);
+        handlerResponse(res, 200, 'User retrieved successfully', user);
     }
     catch (error) {
         next(error);
@@ -134,10 +134,10 @@ export const updateUser = async (req, res, next) => {
         const updatedUser = await updateUserService(id, fields);
 
         if (!updatedUser) {
-            return handerResponse(res, 404, "User not found");
+            return handlerResponse(res, 404, "User not found");
         }
 
-        return handerResponse(res, 200, "User updated successfully", updatedUser);
+        return handlerResponse(res, 200, "User updated successfully", updatedUser);
 
     } catch (error) {
         next(error);
@@ -149,9 +149,9 @@ export const deleteUser = async(req, res, next) => {
     try {
         const deletedUser = await deleteUserService(id);        
         if (!deletedUser) {
-            return handerResponse(res, 404, 'User not found');
+            return handlerResponse(res, 404, 'User not found');
         }
-        handerResponse(res, 200, 'User deleted successfully', deletedUser);
+        handlerResponse(res, 200, 'User deleted successfully', deletedUser);
     } catch (error) {
         next(error);
     }
@@ -164,12 +164,12 @@ export const updateCustomerInfo = async (req, res, next) => {
     try {
         // Validate phone if provided
         if (customerPhone && !/^[0-9]{11}$/.test(customerPhone)) {
-            return handerResponse(res, 400, "Phone must be exactly 11 digits");
+            return handlerResponse(res, 400, "Phone must be exactly 11 digits");
         }
 
         // Validate driverLicense if provided
         if (driverLicense && driverLicense.length > 20) {
-            return handerResponse(res, 400, "Driver license must be max 20 characters");
+            return handlerResponse(res, 400, "Driver license must be max 20 characters");
         }
 
         // Build fields object with only provided values
@@ -183,14 +183,14 @@ export const updateCustomerInfo = async (req, res, next) => {
         const updatedCustomer = await updateCustomerInfoService(id, fields);
 
         if (!updatedCustomer) {
-            return handerResponse(res, 404, "Customer not found");
+            return handlerResponse(res, 404, "Customer not found");
         }
 
-        return handerResponse(res, 200, "Customer information updated successfully", updatedCustomer);
+        return handlerResponse(res, 200, "Customer information updated successfully", updatedCustomer);
 
     } catch (error) {
         if (error.code === "23505") {
-            return handerResponse(res, 409, "Phone or driver license already exists");
+            return handlerResponse(res, 409, "Phone or driver license already exists");
         }
         next(error);
     }
@@ -200,13 +200,13 @@ export const getCustomerInfo = async (req, res, next) => {
     const { id } = req.params;
     try {
         if (!id || isNaN(id)) {
-            return handerResponse(res, 400, "Invalid user ID");
+            return handlerResponse(res, 400, "Invalid user ID");
         }
         const customer = await getCustomerByUserIdService(id);
         if (!customer) {
-            return handerResponse(res, 404, "Customer not found");
+            return handlerResponse(res, 404, "Customer not found");
         }
-        handerResponse(res, 200, "Customer information retrieved successfully", customer);
+        handlerResponse(res, 200, "Customer information retrieved successfully", customer);
     } catch (error) {
         next(error);
     }
@@ -219,7 +219,7 @@ export const updateStaffInfo = async (req, res, next) => {
     try {
         // Validate phone if provided
         if (staffPhone && !/^[0-9]{11}$/.test(staffPhone)) {
-            return handerResponse(res, 400, "Phone must be exactly 11 digits");
+            return handlerResponse(res, 400, "Phone must be exactly 11 digits");
         }
 
         // Build fields object with only provided values
@@ -233,14 +233,14 @@ export const updateStaffInfo = async (req, res, next) => {
         const updatedStaff = await updateStaffInfoService(id, fields);
 
         if (!updatedStaff) {
-            return handerResponse(res, 404, "Staff not found");
+            return handlerResponse(res, 404, "Staff not found");
         }
 
-        return handerResponse(res, 200, "Staff information updated successfully", updatedStaff);
+        return handlerResponse(res, 200, "Staff information updated successfully", updatedStaff);
 
     } catch (error) {
         if (error.code === "23505") {
-            return handerResponse(res, 409, "Phone already exists");
+            return handlerResponse(res, 409, "Phone already exists");
         }
         next(error);
     }
@@ -250,13 +250,13 @@ export const getStaffInfo = async (req, res, next) => {
     const { id } = req.params;
     try {
         if (!id || isNaN(id)) {
-            return handerResponse(res, 400, "Invalid user ID");
+            return handlerResponse(res, 400, "Invalid user ID");
         }
         const staff = await getStaffByUserIdService(id);
         if (!staff) {
-            return handerResponse(res, 404, "Staff not found");
+            return handlerResponse(res, 404, "Staff not found");
         }
-        handerResponse(res, 200, "Staff information retrieved successfully", staff);
+        handlerResponse(res, 200, "Staff information retrieved successfully", staff);
     } catch (error) {
         next(error);
     }
